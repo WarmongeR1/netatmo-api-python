@@ -8,3 +8,4 @@ lnetatmo.egg-info/
 *.pyc
 .idea/
 
+my_test.py

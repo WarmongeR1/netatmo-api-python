@@ -6,9 +6,9 @@ from distutils.core import setup
 
 setup(
     name='lnetatmo',
-    version='0.5.0',
-    author='Philippe Larduinat',
-    author_email='philippelt@users.sourceforge.net',
+    version='0.7.0',
+    author='Philippe Larduinat, Alexander Sapronov',
+    author_email='sapronov.alexander92@gmail.com',
     py_modules=['lnetatmo'],
     scripts=[],
     data_files=[],
