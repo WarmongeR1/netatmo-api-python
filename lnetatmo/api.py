@@ -1,138 +1,169 @@
-# Published Jan 2013
-# Revised Jan 2014 (to add new modules data)
-# Author : Philippe Larduinat, philippelt@users.sourceforge.net
-# Public domain source code
+# -*- coding: utf-8 -*-
+
+
 """
-This API provides access to the Netatmo weather station or/and the Welcome camera
+This API provides access to the Netatmo weather station or/and the
+    Welcome camera
 This package can be used with Python2 or Python3 applications and do not
 require anything else than standard libraries
 
 PythonAPI Netatmo REST data access
-coding=utf-8
 """
 import imghdr
-import json
-import time
 import warnings
-from sys import version_info
 
-# HTTP libraries depends upon Python 2 or 3
-if version_info.major == 3:
-    import urllib.parse, urllib.request
-else:
-    from urllib import urlencode
-    import urllib2
+from .utils import *
 
-######################## USER SPECIFIC INFORMATION ######################
-
-# To be able to have a program accessing your netatmo data, you have to register your program as
-# a Netatmo app in your Netatmo account. All you have to do is to give it a name (whatever) and you will be
-# returned a client_id and secret that your app has to supply to access netatmo servers.
-
-_CLIENT_ID = ""  # Your client ID from Netatmo app registration at http://dev.netatmo.com/dev/listapps
-_CLIENT_SECRET = ""  # Your client app secret   '     '
-_USERNAME = ""  # Your netatmo account username
-_PASSWORD = ""  # Your netatmo account password
-
-#########################################################################
+BASE_URL = "https://api.netatmo.net/"
+AUTH_REQ = BASE_URL + "oauth2/token"
+GET_MEASURE_REQ = BASE_URL + "api/getmeasure"
+URL_STATION_DATA = BASE_URL + "api/getstationsdata"
+GET_HOME_DATA_REQ = BASE_URL + "api/gethomedata"
+GET_CAMERA_PICTURE_REQ = BASE_URL + "api/getcamerapicture"
+GET_EVENT_SUN_TIL_REQ = BASE_URL + "api/geteventsuntil"
 
 
-# Common definitions
+def get_auth_info_by_username_pass(client_id,
+                                   client_secret,
+                                   username,
+                                   password,
+                                   scope='read_station'):
+    payload = {
+        "grant_type": "password",
+        "client_id": client_id,
+        "client_secret": client_secret,
+        "username": username,
+        "password": password,
+        "scope": scope
+    }
+    response = post(AUTH_REQ, payload)
+    response['expire_in'] = _prepare_expire_in(response['expire_in'])
+    return response['access_token'], response
 
-_BASE_URL = "https://api.netatmo.net/"
-_AUTH_REQ = _BASE_URL + "oauth2/token"
-_GETMEASURE_REQ = _BASE_URL + "api/getmeasure"
-_GETSTATIONDATA_REQ = _BASE_URL + "api/getstationsdata"
-_GETHOMEDATA_REQ = _BASE_URL + "api/gethomedata"
-_GETCAMERAPICTURE_REQ = _BASE_URL + "api/getcamerapicture"
-_GETEVENTSUNTIL_REQ = _BASE_URL + "api/geteventsuntil"
+
+def _prepare_expire_in(value):
+    return int(value + time.time())
 
 
-class ClientAuth:
+class NetatmoAPI:
     """
-    Request authentication and keep access token available through token method. Renew it automatically if necessary
+    Request authentication and keep access token available through token method.
+        Renew it automatically if necessary
 
     Args:
-        clientId (str): Application clientId delivered by Netatmo on dev.netatmo.com
-        clientSecret (str): Application Secret key delivered by Netatmo on dev.netatmo.com
-        username (str)
-        password (str)
+        client_id (str): Application clientId delivered by Netatmo
+            on dev.netatmo.com
+        client_secret (str): Application Secret key delivered by Netatmo
+            on dev.netatmo.com
+        access_token (str)
+        refresh_token (optional(str))
+        expiration (optional(int))
         scope (Optional[str]): Default value is 'read_station'
-            read_station: to retrieve weather station data (Getstationsdata, Getmeasure)
-            read_camera: to retrieve Welcome data (Gethomedata, Getcamerapicture)
+            read_station: to retrieve weather station data (Getstationsdata,
+                Getmeasure)
+            read_camera: to retrieve Welcome data (Gethomedata,
+                Getcamerapicture)
             access_camera: to access the camera, the videos and the live stream.
-            Several value can be used at the same time, ie: 'read_station read_camera'
+            Several value can be used at the same time, ie:
+                'read_station read_camera'
     """
 
-    def __init__(self, clientId=_CLIENT_ID,
-                 clientSecret=_CLIENT_SECRET,
-                 username=_USERNAME,
-                 password=_PASSWORD,
+    def __init__(self, client_id,
+                 client_secret,
+                 access_token,
+                 refresh_token=None,
+                 expiration=None,
                  scope="read_station"):
-        postParams = {
-            "grant_type": "password",
-            "client_id": clientId,
-            "client_secret": clientSecret,
-            "username": username,
-            "password": password,
-            "scope": scope
-        }
-        resp = postRequest(_AUTH_REQ, postParams)
-        self._clientId = clientId
-        self._clientSecret = clientSecret
-        self._accessToken = resp['access_token']
-        self.refreshToken = resp['refresh_token']
-        self._scope = resp['scope']
-        self.expiration = int(resp['expire_in'] + time.time())
+
+        self.expiration = None
+        self.refresh_token = None
+
+        self.client_id = client_id
+        self.client_secret = client_secret
+        self._scope = scope
+        self._access_token = access_token
+        if refresh_token is not None:
+            self.refresh_token = refresh_token
+        if expiration is not None:
+            self.expiration = expiration
+        self._stations = None
+
+    def set_refresh_token(self, refresh_token):
+        self.refresh_token = refresh_token
 
     @property
-    def accessToken(self):
-        if self.expiration < time.time():  # Token should be renewed
-            postParams = {
+    def access_token(self):
+        if self.expiration is not None and self.expiration < time.time():
+            if self.refresh_token is None:
+                raise ValueError(
+                    "Not found refresh_token, use set_refresh_token to set it")
+            payload = {
                 "grant_type": "refresh_token",
-                "refresh_token": self.refreshToken,
-                "client_id": self._clientId,
-                "client_secret": self._clientSecret
+                "refresh_token": self.refresh_token,
+                "client_id": self.client_id,
+                "client_secret": self.client_secret
             }
-            resp = postRequest(_AUTH_REQ, postParams)
-            self._accessToken = resp['access_token']
-            self.refreshToken = resp['refresh_token']
+            resp = post(AUTH_REQ, payload)
+            self._access_token = resp['access_token']
+            self.refresh_token = resp['refresh_token']
             self.expiration = int(resp['expire_in'] + time.time())
-        return self._accessToken
+        return self._access_token
+
+    @property
+    def user(self):
+        response = post(URL_STATION_DATA, {"access_token": self.access_token})
+        return response['body']['user']
+
+    @property
+    def email(self):
+        response = post(URL_STATION_DATA, {"access_token": self.access_token})
+        return response['body']['user']['mail']
+
+    @property
+    def stations(self):
+        if self._stations is None:
+            response = post(URL_STATION_DATA,
+                            {"access_token": self.access_token})
+            self._stations = response['body']['devices']
+        return self._stations
 
 
-class User:
-    """
-    This class returns basic information about the user
+class WeatherStation:
+    def __init__(self, **kwargs):
+        self.station = kwargs
 
-    Args:
-        authData (ClientAuth): Authentication information with a working access Token
-    """
+        self._modules = None
 
-    def __init__(self, authData):
-        postParams = {
-            "access_token": authData.accessToken
-        }
-        resp = postRequest(_GETSTATIONDATA_REQ, postParams)
-        self.rawData = resp['body']
-        self.devList = self.rawData['devices']
-        self.ownerMail = self.rawData['user']['mail']
+    @property
+    def modules(self):
+        if self._modules is None:
+            self._modules = {x['_id']: x for x in self.station['modules']}
+        return self._modules
+
+    @property
+    def modules_names(self):
+        return [x['module_name'] for x in self.modules.values()]
+
+    @property
+    def name(self):
+        return self.station['station_name']
 
 
+# DEPRECATED
 class WeatherStationData:
     """
     List the Weather Station devices (stations and modules)
 
     Args:
-        authData (ClientAuth): Authentication information with a working access Token
+        authData (NetatmoAPI): Authentication information with a working access Token
     """
 
     def __init__(self, authData):
-        self.getAuthToken = authData.accessToken
+        self.getAuthToken = authData.access_token
         postParams = {
             "access_token": self.getAuthToken
         }
-        resp = postRequest(_GETSTATIONDATA_REQ, postParams)
+        resp = post(URL_STATION_DATA, postParams)
         self.rawData = resp['body']['devices']
         self.stations = {d['_id']: d for d in self.rawData}
         self.modules = dict()
@@ -147,7 +178,8 @@ class WeatherStationData:
         return res
 
     def stationByName(self, station=None):
-        if not station: station = self.default_station
+        if not station:
+            station = self.default_station
         for i, s in self.stations.items():
             if s['station_name'] == station:
                 return self.stations[i]
@@ -227,7 +259,7 @@ class WeatherStationData:
         if limit: postParams['limit'] = limit
         postParams['optimize'] = "true" if optimize else "false"
         postParams['real_time'] = "true" if real_time else "false"
-        return postRequest(_GETMEASURE_REQ, postParams)
+        return post(GET_MEASURE_REQ, postParams)
 
     def MinMaxTH(self, station=None, module=None, frame="last24"):
         if not station: station = self.default_station
@@ -282,15 +314,15 @@ class WelcomeData:
     List the Netatmo Welcome cameras informations (Homes, cameras, events, persons)
 
     Args:
-        authData (ClientAuth): Authentication information with a working access Token
+        authData (NetatmoAPI): Authentication information with a working access Token
     """
 
     def __init__(self, authData):
-        self.getAuthToken = authData.accessToken
+        self.getAuthToken = authData.access_token
         postParams = {
             "access_token": self.getAuthToken
         }
-        resp = postRequest(_GETHOMEDATA_REQ, postParams)
+        resp = post(GET_HOME_DATA_REQ, postParams)
         self.rawData = resp['body']
         self.homes = {d['id']: d for d in self.rawData['homes']}
         self.persons = dict()
@@ -362,11 +394,11 @@ class WelcomeData:
         if camera_data:
             vpn_url = camera_data['vpn_url']
             if camera_data['is_local']:
-                resp = postRequest(
+                resp = post(
                     '{0}/command/ping'.format(camera_data['vpn_url']), dict())
                 temp_local_url = resp['local_url']
-                resp = postRequest('{0}/command/ping'.format(temp_local_url),
-                                   dict())
+                resp = post('{0}/command/ping'.format(temp_local_url),
+                            dict())
                 if temp_local_url == resp['local_url']:
                     local_url = temp_local_url
         return vpn_url, local_url
@@ -394,8 +426,8 @@ class WelcomeData:
             "image_id": image_id,
             "key": key
         }
-        resp = postRequest(_GETCAMERAPICTURE_REQ, postParams, json_resp=False,
-                           body_size=None)
+        resp = post(GET_CAMERA_PICTURE_REQ, postParams, json_resp=False,
+                    body_size=None)
         image_type = imghdr.what('NONE.FILE', resp)
         return resp, image_type
 
@@ -430,7 +462,7 @@ class WelcomeData:
             "home_id": home_data['id'],
             "event_id": event['id']
         }
-        resp = postRequest(_GETEVENTSUNTIL_REQ, postParams)
+        resp = post(GET_EVENT_SUN_TIL_REQ, postParams)
         eventList = resp['body']['events_list']
         for e in eventList:
             self.events[e['camera_id']][e['time']] = e
@@ -504,66 +536,3 @@ class WelcomeData:
         if self.lastEvent[cam_id]['type'] == 'movement':
             return True
         return False
-
-
-# Utilities routines
-
-def postRequest(url, params, json_resp=True, body_size=65535):
-    # Netatmo response body size limited to 64k (should be under 16k)
-    if version_info.major == 3:
-        req = urllib.request.Request(url)
-        req.add_header("Content-Type",
-                       "application/x-www-form-urlencoded;charset=utf-8")
-        params = urllib.parse.urlencode(params).encode('utf-8')
-        resp = urllib.request.urlopen(req, params).read(body_size).decode(
-            "utf-8")
-    else:
-        params = urlencode(params)
-        headers = {
-            "Content-Type": "application/x-www-form-urlencoded;charset=utf-8"}
-        req = urllib2.Request(url=url, data=params, headers=headers)
-        resp = urllib2.urlopen(req).read(body_size)
-    if json_resp:
-        return json.loads(resp)
-    else:
-        return resp
-
-
-def toTimeString(value):
-    return time.strftime("%Y-%m-%d_%H:%M:%S", time.localtime(int(value)))
-
-
-def toEpoch(value):
-    return int(time.mktime(time.strptime(value, "%Y-%m-%d_%H:%M:%S")))
-
-
-def todayStamps():
-    today = time.strftime("%Y-%m-%d")
-    today = int(time.mktime(time.strptime(today, "%Y-%m-%d")))
-    return today, today + 3600 * 24
-
-
-# Global shortcut
-
-def getStationMinMaxTH(station=None, module=None):
-    authorization = ClientAuth()
-    devList = DeviceList(authorization)
-    if not station: station = devList.default_station
-    if module:
-        mname = module
-    else:
-        mname = devList.stationByName(station)['module_name']
-    lastD = devList.lastData(station)
-    if mname == "*":
-        result = dict()
-        for m in lastD.keys():
-            if time.time() - lastD[m]['When'] > 3600: continue
-            r = devList.MinMaxTH(module=m)
-            result[m] = (r[0], lastD[m]['Temperature'], r[1])
-    else:
-        if time.time() - lastD[mname]['When'] > 3600:
-            result = ["-", "-"]
-        else:
-            result = [lastD[mname]['Temperature'], lastD[mname]['Humidity']]
-        result.extend(devList.MinMaxTH(station, mname))
-    return result

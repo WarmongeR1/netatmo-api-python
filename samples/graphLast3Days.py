@@ -16,7 +16,7 @@ from matplotlib.ticker import FormatStrFormatter
 import lnetatmo
 
 # Access to the sensors
-auth = lnetatmo.ClientAuth()
+auth = lnetatmo.NetatmoAPI()
 dev = lnetatmo.DeviceList(auth)
 
 # Time of information collection : 3*24hours windows to now

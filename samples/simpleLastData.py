@@ -9,7 +9,7 @@
 
 import lnetatmo
 
-authorization = lnetatmo.ClientAuth()
+authorization = lnetatmo.NetatmoAPI()
 devList = lnetatmo.WeatherStationData(authorization)
 
 print("Current temperature (inside/outside): %s / %s °C" %

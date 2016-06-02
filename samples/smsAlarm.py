@@ -18,7 +18,7 @@ MARKER_FILE = "/<somewhere>/TempAlarm"  # This flag file will be used to avoid s
 # Remember that the user who run the cron job must have the rights to create the file
 
 # Access the station
-authorization = lnetatmo.ClientAuth()
+authorization = lnetatmo.NetatmoAPI()
 devList = lnetatmo.WeatherStationData(authorization)
 
 message = []

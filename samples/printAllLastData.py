@@ -13,7 +13,7 @@ import time
 
 import lnetatmo
 
-authorization = lnetatmo.ClientAuth()
+authorization = lnetatmo.NetatmoAPI()
 devList = lnetatmo.WeatherStationData(authorization)
 
 # For each available module in the returned data that should not be older than one hour (3600 s) from now
