@@ -10,21 +10,23 @@
 #  significant)
 
 import time
+
 import lnetatmo
 
 authorization = lnetatmo.ClientAuth()
 devList = lnetatmo.WeatherStationData(authorization)
 
 # For each available module in the returned data that should not be older than one hour (3600 s) from now
-for module, moduleData in devList.lastData(exclude=3600).items() :
-   
+for module, moduleData in devList.lastData(exclude=3600).items():
+
     # Name of the module (or station embedded module), the name you defined in the web netatmo account station management
     print(module)
-    
+
     # List key/values pair of sensor information (eg Humidity, Temperature, etc...)
-    for sensor, value in moduleData.items() :
+    for sensor, value in moduleData.items():
         # To ease reading, print measurement event in readable text (hh:mm:ss)
-        if sensor == "When" : value = time.strftime("%H:%M:%S",time.localtime(value))
+        if sensor == "When": value = time.strftime("%H:%M:%S",
+                                                   time.localtime(value))
         print("%30s : %s" % (sensor, value))
 
 
@@ -32,7 +34,7 @@ for module, moduleData in devList.lastData(exclude=3600).items() :
 #
 # $ printAllLastData
 #
-#Office
+# Office
 #    AbsolutePressure : 988.7
 #                 CO2 : 726
 #       date_max_temp : 1400760301
@@ -45,7 +47,7 @@ for module, moduleData in devList.lastData(exclude=3600).items() :
 #            Pressure : 988.7
 #         Temperature : 19.6
 #                When : 14:10:01
-#Outdoor
+# Outdoor
 #          battery_vp : 5200
 #                 CO2 : 555
 #       date_max_temp : 1400759951
@@ -56,7 +58,7 @@ for module, moduleData in devList.lastData(exclude=3600).items() :
 #           rf_status : 57
 #         Temperature : 17.9
 #                When : 14:09:25
-#Greenhouse
+# Greenhouse
 #      date_min_temp : 1400732204
 #            Humidity : 89
 #            max_temp : 19.9
