@@ -70,46 +70,44 @@ class NetatmoAPI:
                  client_secret,
                  access_token,
                  refresh_token=None,
-                 expiration=None,
-                 scope="read_station"):
+                 expiration=None):
 
         self.expiration = None
-        self.refresh_token = None
+        self._refresh_token = None
 
         self.client_id = client_id
         self.client_secret = client_secret
-        self._scope = scope
         self._access_token = access_token
         if refresh_token is not None:
-            self.refresh_token = refresh_token
+            self._refresh_token = refresh_token
         if expiration is not None:
             self.expiration = expiration
         self._stations = None
 
     def set_refresh_token(self, refresh_token):
-        self.refresh_token = refresh_token
+        self._refresh_token = refresh_token
 
     def refresh_token(self):
         payload = {
             "grant_type": "refresh_token",
-            "refresh_token": self.refresh_token,
+            "refresh_token": self._refresh_token,
             "client_id": self.client_id,
             "client_secret": self.client_secret
         }
 
         response = post(AUTH_REQ, payload)
         self._access_token = response['access_token']
-        self.refresh_token = response['refresh_token']
+        self._refresh_token = response['refresh_token']
         self.expiration = int(response['expire_in'] + time.time())
         return response
 
     @property
     def access_token(self):
         if self.expiration is not None and self.expiration < time.time():
-            if self.refresh_token is None:
+            if self._refresh_token is None:
                 raise ValueError(
                     "Not found refresh_token, use set_refresh_token to set it")
-            self.refresh_token()
+            self._refresh_token()
         return self._access_token
 
     @property
