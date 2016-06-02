@@ -107,7 +107,7 @@ class NetatmoAPI:
             if self._refresh_token is None:
                 raise ValueError(
                     "Not found refresh_token, use set_refresh_token to set it")
-            self._refresh_token()
+            self.refresh_token()
         return self._access_token
 
     @property
