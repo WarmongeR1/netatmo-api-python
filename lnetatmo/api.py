@@ -97,7 +97,7 @@ class NetatmoAPI:
 
         response = post(AUTH_REQ, payload)
         self._access_token = response['access_token']
-        self._refresh_token = response['refresh_token']
+        self._refresh_token = response.get('refresh_token', self._refresh_token)
         self.expiration = int(response['expire_in'] + time.time())
         return response
 
